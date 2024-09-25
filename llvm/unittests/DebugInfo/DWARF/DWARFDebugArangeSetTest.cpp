@@ -161,24 +161,6 @@ TEST(DWARFDebugArangeSet, NoSpaceForEntries) {
       "to contain any entries");
 }
 
-TEST(DWARFDebugArangeSet, UnevenLength) {
-  static const char DebugArangesSecRaw[] =
-      "\x1b\x00\x00\x00" // Length (not a multiple of tuple size)
-      "\x02\x00"         // Version
-      "\x00\x00\x00\x00" // Debug Info Offset
-      "\x04"             // Address Size
-      "\x00"             // Segment Selector Size
-      "\x00\x00\x00\x00" // Padding
-      "\x00\x00\x00\x00" // Entry: Address
-      "\x01\x00\x00\x00" //        Length
-      "\x00\x00\x00\x00" // Termination tuple
-      "\x00\x00\x00\x00";
-  ExpectExtractError(
-      DebugArangesSecRaw,
-      "address range table at offset 0x0 has length that is not a multiple "
-      "of the tuple size");
-}
-
 TEST(DWARFDebugArangeSet, ZeroAddressEntry) {
   static const char DebugArangesSecRaw[] =
       "\x1c\x00\x00\x00" // Length

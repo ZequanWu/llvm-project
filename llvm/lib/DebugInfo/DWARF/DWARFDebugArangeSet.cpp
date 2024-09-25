@@ -101,14 +101,7 @@ Error DWARFDebugArangeSet::extract(DWARFDataExtractor data,
   // The first tuple following the header in each set begins at an offset that
   // is a multiple of the size of a single tuple (that is, twice the size of
   // an address because we do not support non-zero segment selector sizes).
-  // Therefore, the full length should also be a multiple of the tuple size.
   const uint32_t tuple_size = HeaderData.AddrSize * 2;
-  if (full_length % tuple_size != 0)
-    return createStringError(
-        errc::invalid_argument,
-        "address range table at offset 0x%" PRIx64
-        " has length that is not a multiple of the tuple size",
-        Offset);
 
   // The header is padded, if necessary, to the appropriate boundary.
   const uint32_t header_size = *offset_ptr - Offset;
@@ -144,11 +137,12 @@ Error DWARFDebugArangeSet::extract(DWARFDataExtractor data,
     if (arangeDescriptor.Length == 0 && arangeDescriptor.Address == 0) {
       if (*offset_ptr == end_offset)
         return ErrorSuccess();
-      WarningHandler(createStringError(
-          errc::invalid_argument,
-          "address range table at offset 0x%" PRIx64
-          " has a premature terminator entry at offset 0x%" PRIx64,
-          Offset, EntryOffset));
+      if (WarningHandler)
+        WarningHandler(createStringError(
+            errc::invalid_argument,
+            "address range table at offset 0x%" PRIx64
+            " has a premature terminator entry at offset 0x%" PRIx64,
+            Offset, EntryOffset));
     }
 
     ArangeDescriptors.push_back(arangeDescriptor);
