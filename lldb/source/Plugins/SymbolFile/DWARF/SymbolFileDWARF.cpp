@@ -298,6 +298,13 @@ static void ParseSupportFilesFromPrologue(
   }
 }
 
+static std::string RemoveSpace(std::string str) {
+  str.erase(std::remove_if(str.begin(), str.end(),
+                           [](char c) { return llvm::isSpace(c); }),
+            str.end());
+  return str;
+}
+
 void SymbolFileDWARF::Initialize() {
   LogChannelDWARF::Initialize();
   PluginManager::RegisterPlugin(GetPluginNameStatic(),
@@ -2811,6 +2818,12 @@ void SymbolFileDWARF::FindTypes(const TypeQuery &query, TypeResults &results) {
     // it trims any context items down by removing template parameter names.
     TypeQuery query_simple(query);
     if (UpdateCompilerContextForSimpleTemplateNames(query_simple)) {
+      // Canonicalize all strings in the query by remove all spaces in case of
+      // '> >' in nested template types.
+      TypeQuery query_no_space(query);
+      for (auto &context : query_no_space.GetContextRef()) {
+        context.name = ConstString(RemoveSpace(context.name.GetString()));
+      }
       auto type_basename_simple = query_simple.GetTypeBasename();
       // Copy our match's context and update the basename we are looking for
       // so we can use this only to compare the context correctly.
@@ -2833,7 +2846,10 @@ void SymbolFileDWARF::FindTypes(const TypeQuery &query, TypeResults &results) {
 
         // Try to resolve the type.
         if (Type *matching_type = ResolveType(die, true, true)) {
-          ConstString name = matching_type->GetQualifiedName();
+          // Canonicalize name string by remove all spaces in case of '> >' in
+          // nested template types.
+          std::string name =
+              RemoveSpace(matching_type->GetQualifiedName().GetString());
           // We have found a type that still might not match due to template
           // parameters. If we create a new TypeQuery that uses the new type's
           // fully qualified name, we can find out if this type matches at all
@@ -2841,9 +2857,8 @@ void SymbolFileDWARF::FindTypes(const TypeQuery &query, TypeResults &results) {
           // because all template parameters were stripped off. The fully
           // qualified name of the type will have the template parameters and
           // will allow us to make sure it matches correctly.
-          TypeQuery die_query(name.GetStringRef(),
-                              TypeQueryOptions::e_exact_match);
-          if (!query.ContextMatches(die_query.GetContextRef()))
+          TypeQuery die_query(name, TypeQueryOptions::e_exact_match);
+          if (!query_no_space.ContextMatches(die_query.GetContextRef()))
             return true; // Keep iterating over index types, context mismatch.
 
           results.InsertUnique(matching_type->shared_from_this());

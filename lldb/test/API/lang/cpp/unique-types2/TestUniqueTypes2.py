@@ -15,7 +15,17 @@ class UniqueTypesTestCase2(TestBase):
         lldbutil.run_to_source_breakpoint(
             self, "// Set breakpoint here", lldb.SBFileSpec("main.cpp")
         )
-
+        if dict(CFLAGS_EXTRAS="-gsimple-template-names") == debug_flags:
+            self.expect(
+                "image lookup -A -t 'Foo<Foo<int>>'",
+                DATA_TYPES_DISPLAYED_CORRECTLY,
+                substrs=["1 match found"],
+            )
+            self.expect(
+                "image lookup -A -t 'FooPack<Foo<int>>'",
+                DATA_TYPES_DISPLAYED_CORRECTLY,
+                substrs=["1 match found"],
+            )
         self.expect(
             "image lookup -A -t '::Foo<char>'",
             DATA_TYPES_DISPLAYED_CORRECTLY,
