@@ -638,6 +638,9 @@ public:
                                  std::function<bool(MachineOperand &Op)>>>
   getDebugOperandsForReg(Register Reg);
 
+  static DebugLoc getMergedLocation(const DebugLoc &LocA, const DebugLoc &LocB,
+                                    const MachineInstr *ContextMI);
+
   bool isDebugOperand(const MachineOperand *Op) const {
     return Op >= adl_begin(debug_operands()) && Op <= adl_end(debug_operands());
   }

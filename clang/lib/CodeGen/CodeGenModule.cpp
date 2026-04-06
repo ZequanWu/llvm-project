@@ -1152,6 +1152,9 @@ void CodeGenModule::Release() {
   if (CodeGenOpts.CodeViewGHash) {
     getModule().addModuleFlag(llvm::Module::Warning, "CodeViewGHash", 1);
   }
+  if (CodeGenOpts.MultiSlocDebugInfo) {
+    getModule().addModuleFlag(llvm::Module::Max, "MultiSlocDebugInfo", 1);
+  }
   if (CodeGenOpts.ControlFlowGuard) {
     // Function ID tables and checks for Control Flow Guard.
     getModule().addModuleFlag(

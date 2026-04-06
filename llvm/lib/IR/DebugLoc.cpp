@@ -69,6 +69,11 @@ DILocation *DebugLoc::getInlinedAt() const {
   return get()->getInlinedAt();
 }
 
+DILocation *DebugLoc::getMerged() const {
+  assert(get() && "Expected valid DebugLoc");
+  return get()->getMerged();
+}
+
 MDNode *DebugLoc::getInlinedAtScope() const {
   return cast<DILocation>(Loc)->getInlinedAtScope();
 }
@@ -163,20 +168,22 @@ DebugLoc DebugLoc::appendInlinedAt(const DebugLoc &DL, DILocation *InlinedAt,
   return Last;
 }
 
-DebugLoc DebugLoc::getMergedLocations(ArrayRef<DebugLoc> Locs) {
+DebugLoc DebugLoc::getMergedLocations(ArrayRef<DebugLoc> Locs, bool MultiSloc) {
   if (Locs.empty())
     return DebugLoc();
   if (Locs.size() == 1)
     return Locs[0];
   DebugLoc Merged = Locs[0];
   for (const DebugLoc &DL : llvm::drop_begin(Locs)) {
-    Merged = getMergedLocation(Merged, DL);
+    Merged = getMergedLocation(Merged, DL, MultiSloc);
     if (!Merged)
       break;
   }
   return Merged;
 }
-DebugLoc DebugLoc::getMergedLocation(DebugLoc LocA, DebugLoc LocB) {
+
+DebugLoc DebugLoc::getMergedLocation(DebugLoc LocA, DebugLoc LocB,
+                                     bool MultiSloc) {
   if (!LocA || !LocB) {
     // If coverage tracking is enabled, prioritize returning empty non-annotated
     // locations to empty annotated locations.
@@ -190,7 +197,7 @@ DebugLoc DebugLoc::getMergedLocation(DebugLoc LocA, DebugLoc LocB) {
       return LocA;
     return LocB;
   }
-  return DILocation::getMergedLocation(LocA, LocB);
+  return DILocation::getMergedLocation(LocA, LocB, MultiSloc);
 }
 
 #if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)

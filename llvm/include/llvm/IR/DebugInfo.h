@@ -94,6 +94,9 @@ updateLoopMetadataDebugLocations(Instruction &I,
 /// Return Debug Info Metadata Version by checking module flags.
 LLVM_ABI unsigned getDebugMetadataVersionFromModule(const Module &M);
 
+/// Return true if the module flag "MultiSlocDebugInfo" is set.
+LLVM_ABI bool hasMultiSlocDebugInfo(const Module *M);
+
 /// Utility to find all debug info in a module.
 ///
 /// DebugInfoFinder tries to list all debug info MDNodes used in a module. To

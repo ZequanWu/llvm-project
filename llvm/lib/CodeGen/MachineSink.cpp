@@ -1621,8 +1621,8 @@ static void performSink(MachineInstr &MI, MachineBasicBlock &SuccToSinkTo,
   // location to prevent debug-info driven tools from potentially reporting
   // wrong location information.
   if (!SuccToSinkTo.empty() && InsertPos != SuccToSinkTo.end())
-    MI.setDebugLoc(DebugLoc::getMergedLocation(MI.getDebugLoc(),
-                                               InsertPos->getDebugLoc()));
+    MI.setDebugLoc(MachineInstr::getMergedLocation(
+        MI.getDebugLoc(), InsertPos->getDebugLoc(), &MI));
   else
     MI.setDebugLoc(DebugLoc());
 

@@ -680,6 +680,8 @@ private:
   void recordSourceLine(unsigned Line, unsigned Col, const MDNode *Scope,
                         unsigned Flags, StringRef Location = {});
 
+  void recordSourceLine(const DebugLoc &DL, unsigned Flags);
+
   /// Populate LexicalScope entries with variables' info.
   void collectEntityInfo(DwarfCompileUnit &TheCU, const DISubprogram *SP,
                          DenseSet<InlinedEntity> &ProcessedVars);

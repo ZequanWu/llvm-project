@@ -52,8 +52,8 @@ CSEMIRBuilder::getDominatingInstrForID(FoldingSetNodeID &ID,
     } else if (!dominates(MI, CurrPos)) {
       // Update the spliced machineinstr's debug location by merging it with the
       // debug location of the instruction at the insertion point.
-      auto Loc = DebugLoc::getMergedLocation(getDebugLoc(), MI->getDebugLoc());
-      MI->setDebugLoc(Loc);
+      MI->setDebugLoc(MachineInstr::getMergedLocation(MI->getDebugLoc(),
+                                                      getDebugLoc(), MI));
       CurMBB->splice(CurrPos, CurMBB, MI);
     }
     return MachineInstrBuilder(getMF(), MI);
@@ -167,8 +167,8 @@ CSEMIRBuilder::generateCopiesIfRequired(ArrayRef<DstOp> DstOps,
     GISelChangeObserver *Observer = getState().Observer;
     if (Observer)
       Observer->changingInstr(*MIB);
-    MIB->setDebugLoc(
-        DebugLoc::getMergedLocation(MIB->getDebugLoc(), getDebugLoc()));
+    MIB->setDebugLoc(MachineInstr::getMergedLocation(MIB->getDebugLoc(),
+                                                     getDebugLoc(), MIB));
     if (Observer)
       Observer->changedInstr(*MIB);
   }

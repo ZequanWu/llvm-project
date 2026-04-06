@@ -2117,7 +2117,7 @@ bool SimplifyCFGOpt::hoistSuccIdenticalTerminatorToSwitchOrIf(
   Locs.push_back(I1->getDebugLoc());
   for (auto *OtherSuccTI : OtherSuccTIs)
     Locs.push_back(OtherSuccTI->getDebugLoc());
-  NT->setDebugLoc(DebugLoc::getMergedLocations(Locs));
+  NT->setDebugLoc(Instruction::getMergedLocations(Locs, NT));
 
   // PHIs created below will adopt NT's merged DebugLoc.
   IRBuilder<NoFolder> Builder(NT);
@@ -2899,7 +2899,7 @@ static void mergeCompatibleInvokesImpl(ArrayRef<InvokeInst *> Invokes,
       MergedDebugLoc = II->getDebugLoc();
     else
       MergedDebugLoc =
-          DebugLoc::getMergedLocation(MergedDebugLoc, II->getDebugLoc());
+          Instruction::getMergedLocation(II->getDebugLoc(), MergedDebugLoc, II);
 
     // And replace the old `invoke` with an unconditionally branch
     // to the block with the merged `invoke`.

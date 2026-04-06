@@ -2639,7 +2639,7 @@ bool MIParser::parseDILocation(MDNode *&Loc) {
     return error("DILocation requires a scope");
 
   Loc = DILocation::get(MF.getFunction().getContext(), Line, Column, Scope,
-                        InlinedAt, ImplicitCode, AtomGroup, AtomRank);
+                        InlinedAt, nullptr, ImplicitCode, AtomGroup, AtomRank);
   return false;
 }
 

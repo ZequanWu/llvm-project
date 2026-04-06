@@ -36,6 +36,7 @@
 #include "llvm/CodeGen/TargetSubtargetInfo.h"
 #include "llvm/CodeGenTypes/LowLevelType.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DebugInfoMetadata.h"
 #include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Function.h"
@@ -846,6 +847,23 @@ iterator_range<
     filter_iterator<MachineOperand *, std::function<bool(MachineOperand &Op)>>>
 MachineInstr::getDebugOperandsForReg(Register Reg) {
   return getDebugOperandsForRegHelper<MachineOperand, MachineInstr>(this, Reg);
+}
+
+DebugLoc MachineInstr::getMergedLocation(const DebugLoc &LocA,
+                                         const DebugLoc &LocB,
+                                         const MachineInstr *ContextMI) {
+  const llvm::Module *M = nullptr;
+  if (ContextMI) {
+    if (const MachineBasicBlock *MBB = ContextMI->getParent()) {
+      if (const MachineFunction *MF = MBB->getParent()) {
+        const llvm::Function &F = MF->getFunction();
+        M = F.getParent();
+      }
+    }
+    assert(M && "Intruction is not attached to a module");
+  }
+  return DebugLoc::getMergedLocation(LocA, LocB,
+                                     llvm::hasMultiSlocDebugInfo(M));
 }
 
 unsigned MachineInstr::getNumExplicitOperands() const {

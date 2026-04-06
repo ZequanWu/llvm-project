@@ -5649,7 +5649,7 @@ bool LLParser::parseSpecializedMDNode(MDNode *&N, bool IsDistinct) {
   (IsDistinct ? CLASS::getDistinct ARGS : CLASS::get ARGS)
 
 /// parseDILocationFields:
-///   ::= !DILocation(line: 43, column: 8, scope: !5, inlinedAt: !6,
+///   ::= !DILocation(line: 43, column: 8, scope: !5, inlinedAt: !6, merged: !7
 ///   isImplicitCode: true, atomGroup: 1, atomRank: 1)
 bool LLParser::parseDILocation(MDNode *&Result, bool IsDistinct) {
 #define VISIT_MD_FIELDS(OPTIONAL, REQUIRED)                                    \
@@ -5657,15 +5657,17 @@ bool LLParser::parseDILocation(MDNode *&Result, bool IsDistinct) {
   OPTIONAL(column, ColumnField, );                                             \
   REQUIRED(scope, MDField, (/* AllowNull */ false));                           \
   OPTIONAL(inlinedAt, MDField, );                                              \
+  OPTIONAL(merged, MDField, );                                                 \
   OPTIONAL(isImplicitCode, MDBoolField, (false));                              \
   OPTIONAL(atomGroup, MDUnsignedField, (0, UINT64_MAX));                       \
   OPTIONAL(atomRank, MDUnsignedField, (0, UINT8_MAX));
   PARSE_MD_FIELDS();
 #undef VISIT_MD_FIELDS
 
-  Result = GET_OR_DISTINCT(
-      DILocation, (Context, line.Val, column.Val, scope.Val, inlinedAt.Val,
-                   isImplicitCode.Val, atomGroup.Val, atomRank.Val));
+  Result = GET_OR_DISTINCT(DILocation,
+                           (Context, line.Val, column.Val, scope.Val,
+                            inlinedAt.Val, merged.Val, isImplicitCode.Val,
+                            atomGroup.Val, atomRank.Val));
   return false;
 }
 

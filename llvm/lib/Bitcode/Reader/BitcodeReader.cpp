@@ -5206,6 +5206,7 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       I = nullptr;
       continue;
 
+    // TODO: Add merged operand in ir bitcode.
     case bitc::FUNC_CODE_DEBUG_LOC: {      // DEBUG_LOC: [line, col, scope, ia]
       I = getLastInstruction();
       if (!I || Record.size() < 4)
@@ -5232,7 +5233,7 @@ Error BitcodeReader::parseFunctionBody(Function *F) {
       }
 
       LastLoc = DILocation::get(Scope->getContext(), Line, Col, Scope, IA,
-                                isImplicitCode, AtomGroup, AtomRank);
+                                nullptr, isImplicitCode, AtomGroup, AtomRank);
       I->setDebugLoc(LastLoc);
       I = nullptr;
       continue;

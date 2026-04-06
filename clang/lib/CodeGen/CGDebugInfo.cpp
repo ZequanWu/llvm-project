@@ -182,7 +182,7 @@ void CGDebugInfo::addInstSourceAtomMetadata(llvm::Instruction *I,
   // Apply the new DILocation to the instruction.
   llvm::DILocation *NewDL = llvm::DILocation::get(
       I->getContext(), DL.getLine(), DL.getCol(), DL.getScope(),
-      DL.getInlinedAt(), DL.isImplicitCode(), Group, Rank);
+      DL.getInlinedAt(), nullptr, DL.isImplicitCode(), Group, Rank);
   I->setDebugLoc(NewDL);
 }
 
@@ -309,9 +309,9 @@ ApplyDebugLocation::ApplyDebugLocation(CodeGenFunction &CGF, llvm::DebugLoc Loc)
     // Key Instructions: drop the atom group and rank to avoid accidentally
     // propagating it around.
     if (Loc->getAtomGroup())
-      Loc = llvm::DILocation::get(Loc->getContext(), Loc.getLine(),
-                                  Loc->getColumn(), Loc->getScope(),
-                                  Loc->getInlinedAt(), Loc.isImplicitCode());
+      Loc = llvm::DILocation::get(
+          Loc->getContext(), Loc.getLine(), Loc->getColumn(), Loc->getScope(),
+          Loc->getInlinedAt(), nullptr, Loc.isImplicitCode());
     CGF.Builder.SetCurrentDebugLocation(std::move(Loc));
   }
 }

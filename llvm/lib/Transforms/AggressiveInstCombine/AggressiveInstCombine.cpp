@@ -1130,7 +1130,7 @@ static bool mergeConsecutivePartStores(ArrayRef<PartStore> Parts,
   }
   Store->setAAMetadata(AATags);
   Store->mergeDIAssignID(Stores);
-  Store->setDebugLoc(DebugLoc::getMergedLocations(DbgLocs));
+  Store->setDebugLoc(Instruction::getMergedLocations(DbgLocs, Store));
 
   // Remove the old stores.
   for (const PartStore &Part : Parts)

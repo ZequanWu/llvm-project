@@ -737,6 +737,13 @@ public:
   /// merged DebugLoc.
   LLVM_ABI void applyMergedLocation(DebugLoc LocA, DebugLoc LocB);
 
+  static DebugLoc getMergedLocation(const DebugLoc &LocA, const DebugLoc &LocB,
+                                    const Instruction *ContextI);
+  static DebugLoc getMergedLocation(const DebugLoc &LocA, const DebugLoc &LocB,
+                                    const Module *ContextM);
+  static DebugLoc getMergedLocations(ArrayRef<DebugLoc> Locs,
+                                     const Instruction *ContextI);
+
   /// Updates the debug location given that the instruction has been hoisted
   /// from a block to a predecessor of that block.
   /// Note: it is undefined behavior to call this on an instruction not

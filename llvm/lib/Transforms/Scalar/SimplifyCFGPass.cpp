@@ -143,8 +143,8 @@ performBlockTailMerging(Function &F, ArrayRef<BasicBlock *> BBs,
     if (!CommonDebugLoc)
       CommonDebugLoc = Term->getDebugLoc();
     else
-      CommonDebugLoc =
-          DebugLoc::getMergedLocation(CommonDebugLoc, Term->getDebugLoc());
+      CommonDebugLoc = Instruction::getMergedLocation(Term->getDebugLoc(),
+                                                      CommonDebugLoc, Term);
 
     // And turn BB into a block that just unconditionally branches
     // to the canonical block.

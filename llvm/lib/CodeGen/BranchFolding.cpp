@@ -866,7 +866,7 @@ void BranchFolder::mergeCommonTails(unsigned commonTailIndex) {
             "Reached BB end within common tail");
       }
       assert(MI.isIdenticalTo(*Pos) && "Expected matching MIIs!");
-      DL = DebugLoc::getMergedLocation(DL, Pos->getDebugLoc());
+      DL = MachineInstr::getMergedLocation(DL, Pos->getDebugLoc(), &MI);
       NextCommonInsts[i] = ++Pos;
     }
     MI.setDebugLoc(DL);
@@ -2155,8 +2155,8 @@ bool BranchFolder::HoistCommonCodeInSuccs(MachineBasicBlock *MBB) {
              "Expected non-debug lockstep");
 
       // Merge debug locs on hoisted instructions.
-      TI->setDebugLoc(
-          DILocation::getMergedLocation(TI->getDebugLoc(), FI->getDebugLoc()));
+      TI->setDebugLoc(MachineInstr::getMergedLocation(TI->getDebugLoc(),
+                                                      FI->getDebugLoc(), &*TI));
       TI->moveBefore(&*Loc);
       ++FI;
     }

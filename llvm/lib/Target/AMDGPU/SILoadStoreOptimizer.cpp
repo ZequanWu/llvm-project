@@ -1459,8 +1459,8 @@ SILoadStoreOptimizer::mergeRead2Pair(CombineInfo &CI, CombineInfo &Paired,
   const TargetRegisterClass *SuperRC = getTargetRegisterClass(CI, Paired);
   Register DestReg = MRI->createVirtualRegister(SuperRC);
 
-  DebugLoc DL =
-      DebugLoc::getMergedLocation(CI.I->getDebugLoc(), Paired.I->getDebugLoc());
+  DebugLoc DL = MachineInstr::getMergedLocation(
+      CI.I->getDebugLoc(), Paired.I->getDebugLoc(), &*CI.I);
 
   Register BaseReg = AddrReg->getReg();
   unsigned BaseSubReg = AddrReg->getSubReg();
@@ -1545,8 +1545,8 @@ MachineBasicBlock::iterator SILoadStoreOptimizer::mergeWrite2Pair(
          (NewOffset0 != NewOffset1) && "Computed offset doesn't fit");
 
   const MCInstrDesc &Write2Desc = TII->get(Opc);
-  DebugLoc DL =
-      DebugLoc::getMergedLocation(CI.I->getDebugLoc(), Paired.I->getDebugLoc());
+  DebugLoc DL = MachineInstr::getMergedLocation(
+      CI.I->getDebugLoc(), Paired.I->getDebugLoc(), &*CI.I);
 
   Register BaseReg = AddrReg->getReg();
   unsigned BaseSubReg = AddrReg->getSubReg();
@@ -1587,8 +1587,8 @@ MachineBasicBlock::iterator
 SILoadStoreOptimizer::mergeImagePair(CombineInfo &CI, CombineInfo &Paired,
                                      MachineBasicBlock::iterator InsertBefore) {
   MachineBasicBlock *MBB = CI.I->getParent();
-  DebugLoc DL =
-      DebugLoc::getMergedLocation(CI.I->getDebugLoc(), Paired.I->getDebugLoc());
+  DebugLoc DL = MachineInstr::getMergedLocation(
+      CI.I->getDebugLoc(), Paired.I->getDebugLoc(), &*CI.I);
 
   const unsigned Opcode = getNewOpcode(CI, Paired);
 
@@ -1625,8 +1625,8 @@ MachineBasicBlock::iterator SILoadStoreOptimizer::mergeSMemLoadImmPair(
     CombineInfo &CI, CombineInfo &Paired,
     MachineBasicBlock::iterator InsertBefore) {
   MachineBasicBlock *MBB = CI.I->getParent();
-  DebugLoc DL =
-      DebugLoc::getMergedLocation(CI.I->getDebugLoc(), Paired.I->getDebugLoc());
+  DebugLoc DL = MachineInstr::getMergedLocation(
+      CI.I->getDebugLoc(), Paired.I->getDebugLoc(), &*CI.I);
 
   const unsigned Opcode = getNewOpcode(CI, Paired);
 
@@ -1660,8 +1660,8 @@ MachineBasicBlock::iterator SILoadStoreOptimizer::mergeBufferLoadPair(
     MachineBasicBlock::iterator InsertBefore) {
   MachineBasicBlock *MBB = CI.I->getParent();
 
-  DebugLoc DL =
-      DebugLoc::getMergedLocation(CI.I->getDebugLoc(), Paired.I->getDebugLoc());
+  DebugLoc DL = MachineInstr::getMergedLocation(
+      CI.I->getDebugLoc(), Paired.I->getDebugLoc(), &*CI.I);
 
   const unsigned Opcode = getNewOpcode(CI, Paired);
 
@@ -1703,8 +1703,8 @@ MachineBasicBlock::iterator SILoadStoreOptimizer::mergeTBufferLoadPair(
     MachineBasicBlock::iterator InsertBefore) {
   MachineBasicBlock *MBB = CI.I->getParent();
 
-  DebugLoc DL =
-      DebugLoc::getMergedLocation(CI.I->getDebugLoc(), Paired.I->getDebugLoc());
+  DebugLoc DL = MachineInstr::getMergedLocation(
+      CI.I->getDebugLoc(), Paired.I->getDebugLoc(), &*CI.I);
 
   const unsigned Opcode = getNewOpcode(CI, Paired);
 
@@ -1755,8 +1755,8 @@ MachineBasicBlock::iterator SILoadStoreOptimizer::mergeTBufferStorePair(
     CombineInfo &CI, CombineInfo &Paired,
     MachineBasicBlock::iterator InsertBefore) {
   MachineBasicBlock *MBB = CI.I->getParent();
-  DebugLoc DL =
-      DebugLoc::getMergedLocation(CI.I->getDebugLoc(), Paired.I->getDebugLoc());
+  DebugLoc DL = MachineInstr::getMergedLocation(
+      CI.I->getDebugLoc(), Paired.I->getDebugLoc(), &*CI.I);
 
   const unsigned Opcode = getNewOpcode(CI, Paired);
 
@@ -1804,8 +1804,8 @@ MachineBasicBlock::iterator SILoadStoreOptimizer::mergeFlatLoadPair(
     MachineBasicBlock::iterator InsertBefore) {
   MachineBasicBlock *MBB = CI.I->getParent();
 
-  DebugLoc DL =
-      DebugLoc::getMergedLocation(CI.I->getDebugLoc(), Paired.I->getDebugLoc());
+  DebugLoc DL = MachineInstr::getMergedLocation(
+      CI.I->getDebugLoc(), Paired.I->getDebugLoc(), &*CI.I);
 
   const unsigned Opcode = getNewOpcode(CI, Paired);
 
@@ -1835,8 +1835,8 @@ MachineBasicBlock::iterator SILoadStoreOptimizer::mergeFlatStorePair(
     MachineBasicBlock::iterator InsertBefore) {
   MachineBasicBlock *MBB = CI.I->getParent();
 
-  DebugLoc DL =
-      DebugLoc::getMergedLocation(CI.I->getDebugLoc(), Paired.I->getDebugLoc());
+  DebugLoc DL = MachineInstr::getMergedLocation(
+      CI.I->getDebugLoc(), Paired.I->getDebugLoc(), &*CI.I);
 
   const unsigned Opcode = getNewOpcode(CI, Paired);
 
@@ -2112,8 +2112,8 @@ MachineBasicBlock::iterator SILoadStoreOptimizer::mergeBufferStorePair(
     CombineInfo &CI, CombineInfo &Paired,
     MachineBasicBlock::iterator InsertBefore) {
   MachineBasicBlock *MBB = CI.I->getParent();
-  DebugLoc DL =
-      DebugLoc::getMergedLocation(CI.I->getDebugLoc(), Paired.I->getDebugLoc());
+  DebugLoc DL = MachineInstr::getMergedLocation(
+      CI.I->getDebugLoc(), Paired.I->getDebugLoc(), &*CI.I);
 
   const unsigned Opcode = getNewOpcode(CI, Paired);
 

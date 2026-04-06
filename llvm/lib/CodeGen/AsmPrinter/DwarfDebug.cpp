@@ -34,7 +34,9 @@
 #include "llvm/DebugInfo/DWARF/DWARFDataExtractor.h"
 #include "llvm/DebugInfo/DWARF/LowLevel/DWARFExpression.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DebugInfoMetadata.h"
+#include "llvm/IR/DebugLoc.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Module.h"
@@ -1475,6 +1477,14 @@ void DwarfDebug::finalizeModuleInfo() {
   // Now that offsets are computed, can replace DIEs in debug_names Entry with
   // an actual offset.
   AccelDebugNames.convertDieToOffset();
+
+  // Emit a dummy file entry to the line table to indicate the feature is enabled.
+  if (llvm::hasMultiSlocDebugInfo(MMI->getModule())) {
+    llvm::MD5::MD5Result DummyMD5 = {};
+    Asm->OutStreamer->emitDwarfFileDirective(
+        0, "", "MULTIPLE_SLOC_DEBUG_INFO", DummyMD5, std::nullopt);
+  }
+
 }
 
 // Emit all Dwarf sections that should come after the content.
@@ -2184,16 +2194,6 @@ void DwarfDebug::beginInstruction(const MachineInstr *MI) {
     }
   }
 
-  auto RecordSourceLine = [this](auto &DL, auto Flags) {
-    SmallString<128> LocationString;
-    if (Asm->OutStreamer->isVerboseAsm()) {
-      raw_svector_ostream OS(LocationString);
-      DL.print(OS);
-    }
-    recordSourceLine(DL.getLine(), DL.getCol(), DL.getScope(), Flags,
-                     LocationString);
-  };
-
   // There may be a mixture of scopes using and not using Key Instructions.
   // Not-Key-Instructions functions inlined into Key Instructions functions
   // should use not-key is_stmt handling. Key Instructions functions inlined
@@ -2233,7 +2233,7 @@ void DwarfDebug::beginInstruction(const MachineInstr *MI) {
       // But we might be coming back to it after a line 0 record.
       if ((LastAsmLine == 0 && DL.getLine() != 0) || Flags) {
         // Reinstate the source location but not marked as a statement.
-        RecordSourceLine(DL, Flags);
+        recordSourceLine(DL, Flags);
       }
       return;
     }
@@ -2267,7 +2267,9 @@ void DwarfDebug::beginInstruction(const MachineInstr *MI) {
   // We have an explicit location, different from the previous location.
   // Don't repeat a line-0 record, but otherwise emit the new location.
   // (The new location might be an explicit line 0, which we do emit.)
-  if (DL.getLine() == 0 && LastAsmLine == 0)
+  // But if the line-0 location has merged operand, we want to emit it and all
+  // the merged operands.
+  if (DL.getLine() == 0 && LastAsmLine == 0 && !DL->getMerged())
     return;
   if (MI == PrologEndLoc) {
     Flags |= DWARF2_FLAG_PROLOGUE_END | DWARF2_FLAG_IS_STMT;
@@ -2295,13 +2297,7 @@ void DwarfDebug::beginInstruction(const MachineInstr *MI) {
 
 /// Default implementation of target-specific source line recording.
 void DwarfDebug::recordTargetSourceLine(const DebugLoc &DL, unsigned Flags) {
-  SmallString<128> LocationString;
-  if (Asm->OutStreamer->isVerboseAsm()) {
-    raw_svector_ostream OS(LocationString);
-    DL.print(OS);
-  }
-  recordSourceLine(DL.getLine(), DL.getCol(), DL.getScope(), Flags,
-                   LocationString);
+  recordSourceLine(DL, Flags);
 }
 
 // Returns the position where we should place prologue_end, potentially nullptr,
@@ -2947,6 +2943,37 @@ void DwarfDebug::recordSourceLine(unsigned Line, unsigned Col, const MDNode *S,
   ::recordSourceLine(*Asm, Line, Col, S, Flags,
                      Asm->OutStreamer->getContext().getDwarfCompileUnitID(),
                      getDwarfVersion(), getUnits(), Location);
+}
+
+void DwarfDebug::recordSourceLine(const DebugLoc &DL, unsigned Flags) {
+  // If --enable-multi-sloc-debug-info is enabled, DILocation might have
+  // merged operand to form a linked list. The head of the linked list is the
+  // primary location (the final merged location). We want to emit the primary
+  // location as the last location so standard DWARF consumers will have the
+  // primary location override previous locations in the same address. For
+  // those non-primary source locations, we only emit their is_stmt flag to
+  // avoid bloating DWARF line table too much.
+  auto PrintLocString = [this](const DebugLoc &DL, bool IsPrimary) {
+    SmallString<128> LocString;
+    if (Asm->OutStreamer->isVerboseAsm()) {
+      raw_svector_ostream OS(LocString);
+      DL.print(OS);
+      if (!IsPrimary)
+        LocString += "(merged)";
+    }
+    return LocString;
+  };
+  SmallVector<DILocation *> LocChain;
+  for (auto *MergedDL = DL.get(); MergedDL; MergedDL = MergedDL->getMerged())
+    LocChain.push_back(MergedDL);
+  for (auto It = LocChain.rbegin(), E = LocChain.rend(); It != E; ++It) {
+    bool IsPrimary = (It == E - 1);
+    unsigned CurrentFlags = IsPrimary ? Flags : (Flags & DWARF2_FLAG_IS_STMT);
+    const DebugLoc MergedDL = DebugLoc(*It);
+    recordSourceLine(MergedDL->getLine(), MergedDL->getColumn(),
+                     MergedDL->getScope(), CurrentFlags,
+                     PrintLocString(MergedDL, IsPrimary));
+  }
 }
 
 //===----------------------------------------------------------------------===//

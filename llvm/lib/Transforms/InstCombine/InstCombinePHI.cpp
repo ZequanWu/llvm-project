@@ -41,16 +41,16 @@ STATISTIC(NumPHICSEs, "Number of PHI's that got CSE'd");
 /// as input. The debug location of the single operation will be the merged
 /// locations of the original PHI node arguments.
 void InstCombinerImpl::PHIArgMergedDebugLoc(Instruction *Inst, PHINode &PN) {
-  auto *FirstInst = cast<Instruction>(PN.getIncomingValue(0));
-  Inst->setDebugLoc(FirstInst->getDebugLoc());
+  auto InstDL = cast<Instruction>(PN.getIncomingValue(0))->getDebugLoc();
   // We do not expect a CallInst here, otherwise, N-way merging of DebugLoc
   // will be inefficient.
   assert(!isa<CallInst>(Inst));
 
   for (Value *V : drop_begin(PN.incoming_values())) {
     auto *I = cast<Instruction>(V);
-    Inst->applyMergedLocation(Inst->getDebugLoc(), I->getDebugLoc());
+    InstDL = Instruction::getMergedLocation(I->getDebugLoc(), InstDL, I);
   }
+  Inst->setDebugLoc(InstDL);
 }
 
 /// If the phi is within a phi web, which is formed by the def-use chain

@@ -4456,6 +4456,11 @@ def fdebug_macro : Flag<["-"], "fdebug-macro">, Group<f_Group>,
 def fno_debug_macro : Flag<["-"], "fno-debug-macro">, Group<f_Group>,
   Visibility<[ClangOption, CLOption, DXCOption]>,
   HelpText<"Do not emit macro debug information">;
+defm multi_sloc_debug_info : BoolFOption<"multi-sloc-debug-info",
+  CodeGenOpts<"MultiSlocDebugInfo">, DefaultFalse,
+  PosFlag<SetTrue, [], [ClangOption, CC1Option],
+          "Emit multiple source location debug info for merged instructions">,
+  NegFlag<SetFalse>>;
 def fstrict_aliasing : Flag<["-"], "fstrict-aliasing">, Group<f_Group>,
   Visibility<[ClangOption, CLOption, DXCOption]>,
   HelpText<"Enable optimizations based on strict aliasing rules">;

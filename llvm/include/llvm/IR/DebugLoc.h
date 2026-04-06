@@ -176,15 +176,20 @@ public:
   /// If they do not share a common scope the location is ambiguous and can't
   /// be represented in a line entry. In this case, set line and column as 0
   /// and use the scope of any location.
+  /// Use Instruction::getMergedLocation/MachineInstr::getMergedLocation is
+  /// preferred.
   ///
   /// \p LocA \p LocB: The locations to be merged.
-  LLVM_ABI static DebugLoc getMergedLocation(DebugLoc LocA, DebugLoc LocB);
+  LLVM_ABI static DebugLoc getMergedLocation(DebugLoc LocA, DebugLoc LocB,
+                                             bool MultiSloc = false);
 
   /// Try to combine the vector of locations passed as input in a single one.
   /// This function applies getMergedLocation() repeatedly left-to-right.
+  /// Use Instruction::getMergedLocations is preferred.
   ///
   /// \p Locs: The locations to be merged.
-  LLVM_ABI static DebugLoc getMergedLocations(ArrayRef<DebugLoc> Locs);
+  LLVM_ABI static DebugLoc getMergedLocations(ArrayRef<DebugLoc> Locs,
+                                              bool MultiSloc = false);
 
   /// If this DebugLoc is non-empty, returns this DebugLoc; otherwise, selects
   /// \p Other.
@@ -264,6 +269,7 @@ public:
   LLVM_ABI unsigned getCol() const;
   LLVM_ABI MDNode *getScope() const;
   LLVM_ABI DILocation *getInlinedAt() const;
+  LLVM_ABI DILocation *getMerged() const;
 
   /// Get the fully inlined-at scope for a DebugLoc.
   ///

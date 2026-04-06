@@ -17,6 +17,7 @@
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/SmallPtrSet.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -44,6 +45,13 @@
 using namespace llvm;
 using namespace llvm::at;
 using namespace llvm::dwarf;
+
+STATISTIC(NumDropLocation,
+          "Number of calls to dropLocation when location is not empty");
+STATISTIC(NumDropLocationWithMerged,
+          "Number of adding original location as merged operand");
+STATISTIC(NumDropLocationNotLowerToCall, "Number of not lower to call");
+STATISTIC(NumDropLocationNoScope, "Number of no scope");
 
 TinyPtrVector<DbgVariableRecord *> llvm::findDVRDeclares(Value *V) {
   // This function is hot. Check whether the value has any metadata to avoid a
@@ -860,6 +868,31 @@ private:
 
 } // end anonymous namespace
 
+namespace llvm {
+static bool hasMultiSlocDebugInfo(const Instruction *I) {
+  const Module *M = nullptr;
+  // Don't use I->getModule() because it might not attached to a basic block.
+  // Same reason for no using BB->getModule().
+  if (I) {
+    if (const BasicBlock *BB = I->getParent())
+      if (const Function *F = BB->getParent())
+        M = F->getParent();
+    assert(M && "Intruction is not attached to a module");
+  }
+  return M && hasMultiSlocDebugInfo(M);
+}
+
+bool hasMultiSlocDebugInfo(const llvm::Module *M) {
+  if (!M)
+    return false;
+
+  if (auto *Val = mdconst::extract_or_null<ConstantInt>(
+          M->getModuleFlag("MultiSlocDebugInfo")))
+    return Val->getZExtValue() != 0;
+  return false;
+}
+} // namespace llvm
+
 void DebugTypeInfoRemoval::traverse(MDNode *N) {
   if (!N || Replacements.count(N))
     return;
@@ -987,7 +1020,26 @@ unsigned llvm::getDebugMetadataVersionFromModule(const Module &M) {
 }
 
 void Instruction::applyMergedLocation(DebugLoc LocA, DebugLoc LocB) {
-  setDebugLoc(DebugLoc::getMergedLocation(LocA, LocB));
+  setDebugLoc(
+      DebugLoc::getMergedLocation(LocA, LocB, hasMultiSlocDebugInfo(this)));
+}
+
+DebugLoc Instruction::getMergedLocation(const DebugLoc &LocA,
+                                        const DebugLoc &LocB,
+                                        const Instruction *ContextI) {
+  return DebugLoc::getMergedLocation(LocA, LocB,
+                                     hasMultiSlocDebugInfo(ContextI));
+}
+DebugLoc Instruction::getMergedLocation(const DebugLoc &LocA,
+                                        const DebugLoc &LocB,
+                                        const Module *ContextM) {
+  return DebugLoc::getMergedLocation(LocA, LocB,
+                                     hasMultiSlocDebugInfo(ContextM));
+}
+
+DebugLoc Instruction::getMergedLocations(ArrayRef<DebugLoc> Locs,
+                                         const Instruction *ContextI) {
+  return DebugLoc::getMergedLocations(Locs, hasMultiSlocDebugInfo(ContextI));
 }
 
 void Instruction::mergeDIAssignID(
@@ -1028,6 +1080,7 @@ void Instruction::dropLocation() {
     return;
   }
 
+  ++NumDropLocation;
   // If this isn't a call, drop the location to allow a location from a
   // preceding instruction to propagate.
   bool MayLowerToCall = false;
@@ -1038,6 +1091,7 @@ void Instruction::dropLocation() {
   }
 
   if (!MayLowerToCall) {
+    ++NumDropLocationNotLowerToCall;
     setDebugLoc(DebugLoc::getDropped());
     return;
   }
@@ -1045,12 +1099,26 @@ void Instruction::dropLocation() {
   // Set a line 0 location for calls to preserve scope information in case
   // inlining occurs.
   DISubprogram *SP = getFunction()->getSubprogram();
-  if (SP)
-    // If a function scope is available, set it on the line 0 location. When
-    // hoisting a call to a predecessor block, using the function scope avoids
-    // making it look like the callee was reached earlier than it should be.
-    setDebugLoc(DILocation::get(getContext(), 0, 0, SP));
-  else
+  if (SP) {
+    if (hasMultiSlocDebugInfo(getModule())) {
+      ++NumDropLocationWithMerged;
+      // Skip the synthetic head if exits because line 0 becomes the new
+      // synthetic head.
+      if (DL.getMerged())
+        setDebugLoc(
+            DILocation::get(getContext(), 0, 0, SP, nullptr, DL.getMerged()));
+      else
+        setDebugLoc(DILocation::get(getContext(), 0, 0, SP, nullptr, DL));
+    }
+    else {
+      // If a function scope is available, set it on the line 0 location. When
+      // hoisting a call to a predecessor block, using the function scope avoids
+      // making it look like the callee was reached earlier than it should be.
+      setDebugLoc(DILocation::get(getContext(), 0, 0, SP));
+    }
+  }
+  else {
+    ++NumDropLocationNoScope;
     // The parent function has no scope. Go ahead and drop the location. If
     // the parent function is inlined, and the callee has a subprogram, the
     // inliner will attach a location to the call.
@@ -1058,6 +1126,7 @@ void Instruction::dropLocation() {
     // One alternative is to set a line 0 location with the existing scope and
     // inlinedAt info. The location might be sensitive to when inlining occurs.
     setDebugLoc(DebugLoc::getDropped());
+  }
 }
 
 //===----------------------------------------------------------------------===//

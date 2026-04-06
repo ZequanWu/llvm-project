@@ -312,6 +312,7 @@ template <> struct MDNodeKeyImpl<MDTuple> : MDNodeOpsKey {
 template <> struct MDNodeKeyImpl<DILocation> {
   Metadata *Scope;
   Metadata *InlinedAt;
+  Metadata *Merged;
   uint64_t AtomGroup : 61;
   uint64_t AtomRank : 3;
   unsigned Line;
@@ -319,21 +320,22 @@ template <> struct MDNodeKeyImpl<DILocation> {
   bool ImplicitCode;
 
   MDNodeKeyImpl(unsigned Line, uint16_t Column, Metadata *Scope,
-                Metadata *InlinedAt, bool ImplicitCode, uint64_t AtomGroup,
-                uint8_t AtomRank)
-      : Scope(Scope), InlinedAt(InlinedAt), AtomGroup(AtomGroup),
-        AtomRank(AtomRank), Line(Line), Column(Column),
+                Metadata *InlinedAt, Metadata *Merged, bool ImplicitCode,
+                uint64_t AtomGroup, uint8_t AtomRank)
+      : Scope(Scope), InlinedAt(InlinedAt), Merged(Merged),
+        AtomGroup(AtomGroup), AtomRank(AtomRank), Line(Line), Column(Column),
         ImplicitCode(ImplicitCode) {}
 
   MDNodeKeyImpl(const DILocation *L)
       : Scope(L->getRawScope()), InlinedAt(L->getRawInlinedAt()),
-        AtomGroup(L->getAtomGroup()), AtomRank(L->getAtomRank()),
-        Line(L->getLine()), Column(L->getColumn()),
+        Merged(L->getRawMerged()), AtomGroup(L->getAtomGroup()),
+        AtomRank(L->getAtomRank()), Line(L->getLine()), Column(L->getColumn()),
         ImplicitCode(L->isImplicitCode()) {}
 
   bool isKeyOf(const DILocation *RHS) const {
     return Line == RHS->getLine() && Column == RHS->getColumn() &&
            Scope == RHS->getRawScope() && InlinedAt == RHS->getRawInlinedAt() &&
+           Merged == RHS->getRawMerged() &&
            ImplicitCode == RHS->isImplicitCode() &&
            AtomGroup == RHS->getAtomGroup() && AtomRank == RHS->getAtomRank();
   }
@@ -347,9 +349,9 @@ template <> struct MDNodeKeyImpl<DILocation> {
     // outweighed by the overall compile time savings by performing this check.
     // * (hash_combine(x) != hash_combine(x, 0))
     if (AtomGroup || AtomRank)
-      return hash_combine(Line, Column, Scope, InlinedAt, ImplicitCode,
+      return hash_combine(Line, Column, Scope, InlinedAt, Merged, ImplicitCode,
                           AtomGroup, (uint8_t)AtomRank);
-    return hash_combine(Line, Column, Scope, InlinedAt, ImplicitCode);
+    return hash_combine(Line, Column, Scope, InlinedAt, Merged, ImplicitCode);
   }
 };
 

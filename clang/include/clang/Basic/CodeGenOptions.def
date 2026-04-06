@@ -141,6 +141,9 @@ CODEGENOPT(XRayFunctionIndex , 1, 1, Benign)
 ///< Set when -fxray-shared is enabled
 CODEGENOPT(XRayShared , 1, 0, Benign)
 
+///< Set when -fmulti-sloc-debug-info is enabled
+CODEGENOPT(MultiSlocDebugInfo, 1, 0, Benign)
+
 ///< Set the minimum number of instructions in a function to determine selective
 ///< XRay instrumentation.
 VALUE_CODEGENOPT(XRayInstructionThreshold , 32, 200, Benign)

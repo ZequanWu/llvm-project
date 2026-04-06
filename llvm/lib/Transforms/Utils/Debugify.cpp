@@ -205,7 +205,7 @@ bool llvm::applyDebugifyMetadata(
         uint64_t AtomGroup = ApplyAtomGroups ? NextLine : 0;
         uint8_t AtomRank = ApplyAtomGroups ? 1 : 0;
         uint64_t Line = NextLine++;
-        I.setDebugLoc(DILocation::get(Ctx, Line, 1, SP, nullptr, false,
+        I.setDebugLoc(DILocation::get(Ctx, Line, 1, SP, nullptr, nullptr, false,
                                       AtomGroup, AtomRank));
       }
 

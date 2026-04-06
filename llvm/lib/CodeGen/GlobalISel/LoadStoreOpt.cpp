@@ -369,7 +369,8 @@ bool LoadStoreOpt::doSingleStoreMerge(SmallVectorImpl<GStore *> &Stores) {
   // For each store, compute pairwise merged debug locs.
   DebugLoc MergedLoc = Stores.front()->getDebugLoc();
   for (auto *Store : drop_begin(Stores))
-    MergedLoc = DebugLoc::getMergedLocation(MergedLoc, Store->getDebugLoc());
+    MergedLoc =
+        MachineInstr::getMergedLocation(Store->getDebugLoc(), MergedLoc, Store);
 
   Builder.setInstr(*Stores.back());
   Builder.setDebugLoc(MergedLoc);

@@ -1487,8 +1487,9 @@ Error MetadataLoader::MetadataLoaderImpl::parseOneMetadata(
     break;
   }
   case bitc::METADATA_LOCATION: {
-    // 5: inlinedAt, 6: isImplicit, 8: Key Instructions fields.
-    if (Record.size() != 5 && Record.size() != 6 && Record.size() != 8)
+    // 5: inlinedAt, 6: isImplicit, 8: Key Instructions fields, 9: merged.
+    if (Record.size() != 5 && Record.size() != 6 && Record.size() != 8 &&
+        Record.size() != 9)
       return error("Invalid record");
 
     IsDistinct = Record[0];
@@ -1497,11 +1498,13 @@ Error MetadataLoader::MetadataLoaderImpl::parseOneMetadata(
     Metadata *Scope = getMD(Record[3]);
     Metadata *InlinedAt = getMDOrNull(Record[4]);
     bool ImplicitCode = Record.size() >= 6 && Record[5];
-    uint64_t AtomGroup = Record.size() == 8 ? Record[6] : 0;
-    uint8_t AtomRank = Record.size() == 8 ? Record[7] : 0;
+    uint64_t AtomGroup = Record.size() >= 8 ? Record[6] : 0;
+    uint8_t AtomRank = Record.size() >= 8 ? Record[7] : 0;
+    Metadata *Merged = Record.size() == 9 ? getMDOrNull(Record[8]) : nullptr;
     MetadataList.assignValue(
-        GET_OR_DISTINCT(DILocation, (Context, Line, Column, Scope, InlinedAt,
-                                     ImplicitCode, AtomGroup, AtomRank)),
+        GET_OR_DISTINCT(DILocation,
+                        (Context, Line, Column, Scope, InlinedAt, Merged,
+                         ImplicitCode, AtomGroup, AtomRank)),
         NextMetadataNo);
     NextMetadataNo++;
     break;

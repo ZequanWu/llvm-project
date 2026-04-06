@@ -14,6 +14,7 @@
 #include "LLVMContextImpl.h"
 #include "MetadataImpl.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/Statistic.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/IR/DebugProgramInstruction.h"
@@ -40,7 +41,20 @@ cl::opt<bool> EnableFSDiscriminator(
 LLVM_ABI cl::opt<bool> PickMergedSourceLocations(
     "pick-merged-source-locations", cl::init(false), cl::Hidden,
     cl::desc("Preserve line and column number when merging locations."));
+
+static cl::opt<unsigned> MaxMergedLocs(
+    "max-merged-locs",
+    cl::desc(
+        "Maximum number of unique source locations to merge in a DILocation"),
+    cl::init(16), cl::Hidden);
 } // namespace llvm
+
+STATISTIC(NumGetMergedLocation, "Number of calls to getMergedLocation");
+STATISTIC(NumMergedLocEarlyExits,
+          "Number of fast early exits in getMergedLocation");
+STATISTIC(NumMergedLocDeepMerges,
+          "Number of deep list deduplications performed");
+STATISTIC(NumMaxMergedReached, "Number of the max-merged-locs limit reached");
 
 uint32_t DIType::getAlignInBits() const {
   return (getTag() == dwarf::DW_TAG_LLVM_ptrauth_type ? 0 : SubclassData32);
@@ -67,8 +81,8 @@ DILocation::DILocation(LLVMContext &C, StorageType Storage, unsigned Line,
   if (AtomGroup)
     C.updateDILocationAtomGroupWaterline(AtomGroup + 1);
 
-  assert((MDs.size() == 1 || MDs.size() == 2) &&
-         "Expected a scope and optional inlined-at");
+  assert((MDs.size() >= 1 && MDs.size() <= 3) &&
+         "Expected a scope, optional inlined-at and optional merged");
   // Set line and column.
   assert(Column < (1u << 16) && "Expected 16-bit column");
 
@@ -86,42 +100,61 @@ static void adjustColumn(unsigned &Column) {
 
 DILocation *DILocation::getImpl(LLVMContext &Context, unsigned Line,
                                 unsigned Column, Metadata *Scope,
-                                Metadata *InlinedAt, bool ImplicitCode,
-                                uint64_t AtomGroup, uint8_t AtomRank,
-                                StorageType Storage, bool ShouldCreate) {
+                                Metadata *InlinedAt, Metadata* Merged,
+                                bool ImplicitCode, uint64_t AtomGroup,
+                                uint8_t AtomRank, StorageType Storage,
+                                bool ShouldCreate) {
   // Fixup column.
   adjustColumn(Column);
-
   if (Storage == Uniqued) {
-    if (auto *N = getUniqued(Context.pImpl->DILocations,
-                             DILocationInfo::KeyTy(Line, Column, Scope,
-                                                   InlinedAt, ImplicitCode,
-                                                   AtomGroup, AtomRank)))
+    if (auto *N = getUniqued(
+            Context.pImpl->DILocations,
+            DILocationInfo::KeyTy(Line, Column, Scope, InlinedAt, Merged,
+                                  ImplicitCode, AtomGroup, AtomRank))) {
       return N;
-    if (!ShouldCreate)
+    }
+    if (!ShouldCreate) {
       return nullptr;
+    }
   } else {
     assert(ShouldCreate && "Expected non-uniqued nodes to always be created");
   }
 
-  SmallVector<Metadata *, 2> Ops;
+  SmallVector<Metadata *, 3> Ops;
   Ops.push_back(Scope);
-  if (InlinedAt)
+  if (Merged) {
     Ops.push_back(InlinedAt);
+    Ops.push_back(Merged);
+  } else if (InlinedAt) {
+    Ops.push_back(InlinedAt);
+  }
+
   return storeImpl(new (Ops.size(), Storage)
                        DILocation(Context, Storage, Line, Column, AtomGroup,
                                   AtomRank, Ops, ImplicitCode),
                    Storage, Context.pImpl->DILocations);
 }
 
-DILocation *DILocation::getMergedLocations(ArrayRef<DILocation *> Locs) {
+bool DILocation::isBaseEqual(const DILocation *Other) const {
+  if (!Other)
+    return false;
+  return getLine() == Other->getLine() && getColumn() == Other->getColumn() &&
+         getRawScope() == Other->getRawScope() &&
+         getRawInlinedAt() == Other->getRawInlinedAt() &&
+         isImplicitCode() == Other->isImplicitCode() &&
+         getAtomGroup() == Other->getAtomGroup() &&
+         getAtomRank() == Other->getAtomRank();
+}
+
+DILocation *DILocation::getMergedLocations(ArrayRef<DILocation *> Locs,
+                                           bool MultiSloc) {
   if (Locs.empty())
     return nullptr;
   if (Locs.size() == 1)
     return Locs[0];
   auto *Merged = Locs[0];
   for (DILocation *L : llvm::drop_begin(Locs)) {
-    Merged = getMergedLocation(Merged, L);
+    Merged = getMergedLocation(Merged, L, MultiSloc);
     if (Merged == nullptr)
       break;
   }
@@ -220,7 +253,80 @@ struct ScopeLocationsMatcher {
   }
 };
 
-DILocation *DILocation::getMergedLocation(DILocation *LocA, DILocation *LocB) {
+DILocation *DILocation::getMergedLocation(DILocation *LocA, DILocation *LocB,
+                                          bool MultiSloc) {
+  ++NumGetMergedLocation;
+  DILocation *MergedLoc = getMergedLocationInternal(LocA, LocB);
+  assert(
+      !(PickMergedSourceLocations && MultiSloc) &&
+      "Cannot have both flag -pick-merged-source-locations and MultiSloc set.");
+  if (!MultiSloc)
+    return MergedLoc;
+
+  if (MergedLoc == LocA || MergedLoc == LocB) {
+    ++NumMergedLocEarlyExits;
+    return MergedLoc;
+  }
+
+  ++NumMergedLocDeepMerges;
+  LLVMContext &C = LocA->getContext();
+  SmallVector<DILocation *, 17> MergedList = {MergedLoc};
+
+  // Return true only if it adds all merged operands into the list and not
+  // reaches the max length.
+  auto CollectLocs = [&](DILocation *Loc) {
+    for (DILocation *L = Loc; L; L = L->getMerged()) {
+      bool Seen = false;
+      // MergedList is small enough so we don't need to use set.
+      for (DILocation *Visited : MergedList) {
+        if (L->isBaseEqual(Visited)) {
+          Seen = true;
+          break;
+        }
+      }
+      if (!Seen) {
+        MergedList.push_back(L);
+        // Subtract one because we have MergedLoc at MergedList[0] which
+        // shouldn't count into the size.
+        if (MergedList.size() - 1 >= MaxMergedLocs) {
+          ++NumMaxMergedReached;
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+  // If either location has a merged tail, the loc itself is an artifical result
+  // of getMergedLocationInternal. We skip it because it's already captured by
+  // MergedLoc and only collect the original locations in the tail.
+  LocA = LocA->getMerged() != nullptr ? LocA->getMerged() : LocA;
+  LocB = LocB->getMerged() != nullptr ? LocB->getMerged() : LocB;
+  // If we reached the limit when visit LocA, no need to visit LocB and just
+  // append LocA to the end of MergedLoc. We can do so because LocA is the
+  // result of getMergedLocation and it will also not exceed the MaxMergedLocs
+  // limit.
+  if (!CollectLocs(LocA)) {
+    return DILocation::get(C, MergedLoc->getLine(), MergedLoc->getColumn(),
+                           MergedLoc->getScope(), MergedLoc->getInlinedAt(),
+                           LocA, MergedLoc->isImplicitCode(),
+                           MergedLoc->getAtomGroup(), MergedLoc->getAtomRank());
+  }
+  CollectLocs(LocB);
+  DILocation *PrevL = nullptr;
+  for (auto RIt = MergedList.rbegin(); RIt != MergedList.rend(); ++RIt) {
+    DILocation *L = *RIt;
+    if (PrevL == nullptr && L->getMerged() == nullptr)
+      PrevL = L;
+    else
+      PrevL = DILocation::get(C, L->getLine(), L->getColumn(), L->getScope(),
+                              L->getInlinedAt(), PrevL, L->isImplicitCode(),
+                              L->getAtomGroup(), L->getAtomRank());
+  }
+  return PrevL;
+}
+
+DILocation *DILocation::getMergedLocationInternal(DILocation *LocA,
+                                                  DILocation *LocB) {
   if (LocA == LocB)
     return LocA;
 
@@ -303,7 +409,7 @@ DILocation *DILocation::getMergedLocation(DILocation *LocA, DILocation *LocB) {
                                DILocation *InlinedAt) -> DILocation * {
     if (L1 == L2)
       return DILocation::get(C, L1->getLine(), L1->getColumn(), L1->getScope(),
-                             InlinedAt, L1->isImplicitCode(),
+                             InlinedAt, L1->getMerged(), L1->isImplicitCode(),
                              L1->getAtomGroup(), L1->getAtomRank());
 
     // If the locations originate from different subprograms we can't produce
@@ -345,8 +451,8 @@ DILocation *DILocation::getMergedLocation(DILocation *LocA, DILocation *LocB) {
     // Discard source location atom if the line becomes 0. And there's nothing
     // further to do if neither location has an atom number.
     if (!SameLine || !(L1->getAtomGroup() || L2->getAtomGroup()))
-      return DILocation::get(C, Line, Col, Scope, InlinedAt, IsImplicitCode,
-                             /*AtomGroup*/ 0, /*AtomRank*/ 0);
+      return DILocation::get(C, Line, Col, Scope, InlinedAt, nullptr,
+                             IsImplicitCode, /*AtomGroup*/ 0, /*AtomRank*/ 0);
 
     uint64_t Group = 0;
     uint64_t Rank = 0;
@@ -379,8 +485,8 @@ DILocation *DILocation::getMergedLocation(DILocation *LocA, DILocation *LocB) {
       Group = C.incNextDILocationAtomGroup();
       Rank = 1;
     }
-    return DILocation::get(C, Line, Col, Scope, InlinedAt, IsImplicitCode,
-                           Group, Rank);
+    return DILocation::get(C, Line, Col, Scope, InlinedAt, nullptr,
+                           IsImplicitCode, Group, Rank);
   };
 
   DILocation *Result = ARIt != ALocs.rend() ? (*ARIt)->getInlinedAt() : nullptr;
@@ -409,7 +515,7 @@ DILocation *DILocation::getMergedLocation(DILocation *LocA, DILocation *LocB) {
   // way to handle this.
   // Key Instructions: it's fine to drop atom group and rank here, as line 0
   // is a nonsensical is_stmt location.
-  return DILocation::get(C, 0, 0, LocA->getScope(), nullptr, false,
+  return DILocation::get(C, 0, 0, LocA->getScope(), nullptr, nullptr, false,
                          /*AtomGroup*/ 0, /*AtomRank*/ 0);
 }
 

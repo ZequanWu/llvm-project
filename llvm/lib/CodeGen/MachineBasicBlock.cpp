@@ -1611,7 +1611,7 @@ MachineBasicBlock::findBranchDebugLoc() {
     DL = TI->getDebugLoc();
     for (++TI ; TI != end() ; ++TI)
       if (TI->isBranch())
-        DL = DebugLoc::getMergedLocation(DL, TI->getDebugLoc());
+        DL = MachineInstr::getMergedLocation(TI->getDebugLoc(), DL, &*TI);
   }
   return DL;
 }

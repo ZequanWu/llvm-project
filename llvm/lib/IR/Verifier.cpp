@@ -1208,6 +1208,8 @@ void Verifier::visitDILocation(const DILocation &N) {
           "location requires a valid scope", &N, N.getRawScope());
   if (auto *IA = N.getRawInlinedAt())
     CheckDI(isa<DILocation>(IA), "inlined-at should be a location", &N, IA);
+  if (auto *M = N.getRawMerged())
+    CheckDI(isa<DILocation>(M), "merged should be a location", &N, M);
   if (auto *SP = dyn_cast<DISubprogram>(N.getRawScope()))
     CheckDI(SP->isDefinition(), "scope points into the type hierarchy", &N);
 }

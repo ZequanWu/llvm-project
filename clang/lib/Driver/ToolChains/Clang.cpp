@@ -4837,6 +4837,9 @@ renderDebugOptions(const ToolChain &TC, const Driver &D, const llvm::Triple &T,
   if (EmitCodeView && Output.isFilename())
     addDebugObjectName(Args, CmdArgs, DebugCompilationDir,
                        Output.getFilename());
+
+  Args.addOptInFlag(CmdArgs, options::OPT_fmulti_sloc_debug_info,
+                    options::OPT_fno_multi_sloc_debug_info);
 }
 
 static void ProcessVSRuntimeLibrary(const ToolChain &TC, const ArgList &Args,

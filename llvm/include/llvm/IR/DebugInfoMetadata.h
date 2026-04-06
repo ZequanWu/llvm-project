@@ -2612,15 +2612,18 @@ class DILocation : public MDNode {
 
   LLVM_ABI static DILocation *
   getImpl(LLVMContext &Context, unsigned Line, unsigned Column, Metadata *Scope,
-          Metadata *InlinedAt, bool ImplicitCode, uint64_t AtomGroup,
-          uint8_t AtomRank, StorageType Storage, bool ShouldCreate = true);
+          Metadata *InlinedAt, Metadata *Merged, bool ImplicitCode, 
+          uint64_t AtomGroup, uint8_t AtomRank, StorageType Storage,
+          bool ShouldCreate = true);
   static DILocation *getImpl(LLVMContext &Context, unsigned Line,
                              unsigned Column, DILocalScope *Scope,
-                             DILocation *InlinedAt, bool ImplicitCode,
-                             uint64_t AtomGroup, uint8_t AtomRank,
-                             StorageType Storage, bool ShouldCreate = true) {
+                             DILocation *InlinedAt, DILocation *Merged,
+                             bool ImplicitCode, uint64_t AtomGroup, 
+                             uint8_t AtomRank, StorageType Storage,
+                             bool ShouldCreate = true) {
     return getImpl(Context, Line, Column, static_cast<Metadata *>(Scope),
-                   static_cast<Metadata *>(InlinedAt), ImplicitCode, AtomGroup,
+                   static_cast<Metadata *>(InlinedAt),
+                   static_cast<Metadata *>(Merged), ImplicitCode, AtomGroup,
                    AtomRank, Storage, ShouldCreate);
   }
 
@@ -2628,8 +2631,8 @@ class DILocation : public MDNode {
     // Get the raw scope/inlinedAt since it is possible to invoke this on
     // a DILocation containing temporary metadata.
     return getTemporary(getContext(), getLine(), getColumn(), getRawScope(),
-                        getRawInlinedAt(), isImplicitCode(), getAtomGroup(),
-                        getAtomRank());
+                        getRawInlinedAt(), getRawMerged(), isImplicitCode(),
+                        getAtomGroup(), getAtomRank());
   }
 
 public:
@@ -2640,7 +2643,7 @@ public:
     if (!getAtomGroup() && !getAtomRank())
       return this;
     return get(getContext(), getLine(), getColumn(), getScope(), getInlinedAt(),
-               isImplicitCode());
+               getMerged(), isImplicitCode());
   }
 
   // Disallow replacing operands.
@@ -2648,16 +2651,18 @@ public:
 
   DEFINE_MDNODE_GET(DILocation,
                     (unsigned Line, unsigned Column, Metadata *Scope,
-                     Metadata *InlinedAt = nullptr, bool ImplicitCode = false,
-                     uint64_t AtomGroup = 0, uint8_t AtomRank = 0),
-                    (Line, Column, Scope, InlinedAt, ImplicitCode, AtomGroup,
-                     AtomRank))
+                     Metadata *InlinedAt = nullptr, Metadata *Merged = nullptr,
+                     bool ImplicitCode = false, uint64_t AtomGroup = 0,
+                     uint8_t AtomRank = 0),
+                    (Line, Column, Scope, InlinedAt, Merged, ImplicitCode,
+                     AtomGroup, AtomRank))
   DEFINE_MDNODE_GET(DILocation,
                     (unsigned Line, unsigned Column, DILocalScope *Scope,
-                     DILocation *InlinedAt = nullptr, bool ImplicitCode = false,
+                     DILocation *InlinedAt = nullptr,
+                     DILocation *Merged = nullptr, bool ImplicitCode = false,
                      uint64_t AtomGroup = 0, uint8_t AtomRank = 0),
-                    (Line, Column, Scope, InlinedAt, ImplicitCode, AtomGroup,
-                     AtomRank))
+                    (Line, Column, Scope, InlinedAt, Merged, ImplicitCode,
+                     AtomGroup, AtomRank))
 
   /// Return a (temporary) clone of this.
   TempDILocation clone() const { return cloneImpl(); }
@@ -2680,6 +2685,9 @@ public:
 
   DILocation *getInlinedAt() const {
     return cast_or_null<DILocation>(getRawInlinedAt());
+  }
+  DILocation *getMerged() const {
+    return cast_or_null<DILocation>(getRawMerged());
   }
 
   /// Check if the location corresponds to an implicit code.
@@ -2710,6 +2718,9 @@ public:
   DILocalScope *getInlinedAtScope() const {
     return getInlinedAtLocation()->getScope();
   }
+
+  // Compare everything with Other DILocation except the merged operand.
+  bool isBaseEqual(const DILocation *Other) const;
 
   /// Get the DWARF discriminator.
   ///
@@ -2793,8 +2804,11 @@ public:
   /// additional metadata that will not be preserved when merging the unwrapped
   /// DILocations.
   LLVM_ABI static DILocation *getMergedLocation(DILocation *LocA,
-                                                DILocation *LocB);
+                                                DILocation *LocB,
+                                                bool MultiSloc = false);
 
+  static DILocation *getMergedLocationInternal(DILocation *LocA,
+                                               DILocation *LocB);
   /// Try to combine the vector of locations passed as input in a single one.
   /// This function applies getMergedLocation() repeatedly left-to-right.
   /// NB: When merging the locations of instructions, prefer to use
@@ -2803,7 +2817,8 @@ public:
   /// DILocations.
   ///
   /// \p Locs: The locations to be merged.
-  LLVM_ABI static DILocation *getMergedLocations(ArrayRef<DILocation *> Locs);
+  LLVM_ABI static DILocation *getMergedLocations(ArrayRef<DILocation *> Locs,
+                                                 bool MultiSloc);
 
   /// Return the masked discriminator value for an input discrimnator value D
   /// (i.e. zero out the (B+1)-th and above bits for D (B is 0-base).
@@ -2879,8 +2894,13 @@ public:
 
   Metadata *getRawScope() const { return getOperand(0); }
   Metadata *getRawInlinedAt() const {
-    if (getNumOperands() == 2)
+    if (getNumOperands() >= 2)
       return getOperand(1);
+    return nullptr;
+  }
+  Metadata *getRawMerged() const {
+    if (getNumOperands() == 3)
+      return getOperand(2);
     return nullptr;
   }
 
@@ -3036,8 +3056,8 @@ DILocation::cloneWithDiscriminator(unsigned Discriminator) const {
   DILexicalBlockFile *NewScope =
       DILexicalBlockFile::get(getContext(), Scope, getFile(), Discriminator);
   return DILocation::get(getContext(), getLine(), getColumn(), NewScope,
-                         getInlinedAt(), isImplicitCode(), getAtomGroup(),
-                         getAtomRank());
+                         getInlinedAt(), getMerged(), isImplicitCode(),
+                         getAtomGroup(), getAtomRank());
 }
 
 unsigned DILocation::getBaseDiscriminator() const {

@@ -1876,8 +1876,9 @@ static DebugLoc inlineDebugLoc(DebugLoc OrigDL, DILocation *InlinedAt,
                                DenseMap<const MDNode *, MDNode *> &IANodes) {
   auto IA = DebugLoc::appendInlinedAt(OrigDL, InlinedAt, Ctx, IANodes);
   return DILocation::get(Ctx, OrigDL.getLine(), OrigDL.getCol(),
-                         OrigDL.getScope(), IA, OrigDL.isImplicitCode(),
-                         OrigDL->getAtomGroup(), OrigDL->getAtomRank());
+                         OrigDL.getScope(), IA, OrigDL->getMerged(),
+                         OrigDL.isImplicitCode(), OrigDL->getAtomGroup(),
+                         OrigDL->getAtomRank());
 }
 
 /// Update inlined instructions' line numbers to

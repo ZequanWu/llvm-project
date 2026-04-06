@@ -149,10 +149,10 @@ static CallInst *isGEPAndStore(Value *I) {
 }
 
 template <class T = Instruction>
-static DebugLoc mergeDebugLocs(SmallVector<T *> &Insns) {
+static DebugLoc mergeDebugLocs(SmallVector<T *> &Insns, Module* ContextM) {
   DebugLoc Merged = (*Insns.begin())->getDebugLoc();
   for (T *I : Insns)
-    Merged = DebugLoc::getMergedLocation(Merged, I->getDebugLoc());
+    Merged = Instruction::getMergedLocation(I->getDebugLoc(), Merged, ContextM);
   return Merged;
 }
 
@@ -226,7 +226,8 @@ static Instruction *makeGEPAndLoad(Module *M, GEPChainInfo &GEP,
   CallInst *Call = makeIntrinsicCall(M, Intrinsic::bpf_getelementptr_and_load,
                                      {Load->getType()}, Args);
   setParamElementType(Call, 0, GEP.SourceElementType);
-  Call->applyMergedLocation(mergeDebugLocs(GEP.Members), Load->getDebugLoc());
+  Call->setDebugLoc(Instruction::getMergedLocation(
+      mergeDebugLocs(GEP.Members, M), Load->getDebugLoc(), M));
   Call->setName((*GEP.Members.rbegin())->getName());
   if (Load->isUnordered()) {
     Call->setOnlyReadsMemory();
@@ -250,7 +251,8 @@ static Instruction *makeGEPAndStore(Module *M, GEPChainInfo &GEP,
   setParamElementType(Call, 1, GEP.SourceElementType);
   if (Store->getValueOperand()->getType()->isPointerTy())
     setParamReadNone(Call, 0);
-  Call->applyMergedLocation(mergeDebugLocs(GEP.Members), Store->getDebugLoc());
+  Call->setDebugLoc(Instruction::getMergedLocation(
+      mergeDebugLocs(GEP.Members, M), Store->getDebugLoc(), M));
   if (Store->isUnordered()) {
     Call->setOnlyWritesMemory();
     Call->setOnlyAccessesArgMemory();
